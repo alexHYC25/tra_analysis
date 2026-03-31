@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.streamlit/secrets.toml
+每日各站進出站人數20190423-20251231/
+台鐵各車站詳細資料.json
+車站基本資料.json
