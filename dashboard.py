@@ -830,7 +830,11 @@ $$y(t) = g(t) + s(t) + h(t) + \\epsilon_t$$
         st.caption("💡 可在背景執行 `python forecasting.py` 預先算好全部車站，之後秒開。")
 
         if st.button(f"🔮 立即預測 {sname} 未來 {forecast_days} 天", type="primary"):
-            from prophet import Prophet
+            try:
+                from prophet import Prophet
+            except ImportError:
+                st.error("Prophet 套件未安裝。請在本機執行預測，或先執行 forecasting.py 將結果存入資料庫後，雲端即可讀取快取結果。")
+                st.stop()
 
             with st.spinner(f"Prophet 訓練中，請稍候..."):
                 ts = load_station_timeseries(code)
