@@ -6,3 +6,4 @@ plotly==6.6.0
 scikit-learn==1.6.1
 workalendar==17.0.0
 numpy==1.26.4
+cryptography
