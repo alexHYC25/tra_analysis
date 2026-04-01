@@ -78,7 +78,7 @@ def load_cluster_data():
     engine = create_engine(DB_URL)
     sta = pd.read_sql(
         "SELECT staCode, staName, cluster_id, cluster_name, lat, lon, city "
-        "FROM StationInfo WHERE cluster_id IS NOT NULL",
+        "FROM stationinfo WHERE cluster_id IS NOT NULL",
         con=engine
     )
     feat_raw = pd.read_sql(
@@ -97,7 +97,7 @@ def load_cluster_data():
 def load_station_list():
     engine = create_engine(DB_URL)
     return pd.read_sql(
-        "SELECT staCode, staName FROM StationInfo WHERE staName IS NOT NULL ORDER BY staName",
+        "SELECT staCode, staName FROM stationinfo WHERE staName IS NOT NULL ORDER BY staName",
         con=engine
     )
 
@@ -106,7 +106,7 @@ def load_station_timeseries(sta_code):
     engine = create_engine(DB_URL)
     q = text("SELECT trnOpDate AS date, "
              "(gateInComingCnt+gateOutGoingCnt) AS total_passengers "
-             "FROM DailyPassenger WHERE staCode=:code ORDER BY trnOpDate")
+             "FROM dailypassenger WHERE staCode=:code ORDER BY trnOpDate")
     df = pd.read_sql(q, con=engine, params={'code': sta_code})
     df['date'] = pd.to_datetime(df['date'])
     return df
@@ -117,7 +117,7 @@ def load_multi_station_timeseries(codes_tuple):
     placeholders = ','.join([f"'{c}'" for c in codes_tuple])
     q = f"""SELECT d.trnOpDate AS date, s.staName AS station,
                    (d.gateInComingCnt+d.gateOutGoingCnt) AS total_passengers
-            FROM DailyPassenger d JOIN StationInfo s ON d.staCode=s.staCode
+            FROM dailypassenger d JOIN stationinfo s ON d.staCode=s.staCode
             WHERE d.staCode IN ({placeholders}) ORDER BY date"""
     df = pd.read_sql(q, con=engine)
     df['date'] = pd.to_datetime(df['date'])
@@ -129,7 +129,7 @@ def load_monthly_total():
     df = pd.read_sql(
         "SELECT DATE_FORMAT(trnOpDate,'%%Y-%%m') AS ym, "
         "SUM(gateInComingCnt+gateOutGoingCnt) AS total "
-        "FROM DailyPassenger GROUP BY ym ORDER BY ym",
+        "FROM dailypassenger GROUP BY ym ORDER BY ym",
         con=engine
     )
     df['ym'] = pd.to_datetime(df['ym'])
@@ -141,7 +141,7 @@ def load_recent_anomalies(days=90):
     q = text("""SELECT d.trnOpDate AS date, s.staName AS station,
                        s.cluster_name,
                        (d.gateInComingCnt+d.gateOutGoingCnt) AS total
-               FROM DailyPassenger d JOIN StationInfo s ON d.staCode=s.staCode
+               FROM dailypassenger d JOIN stationinfo s ON d.staCode=s.staCode
                WHERE d.trnOpDate >= DATE_SUB(CURDATE(), INTERVAL :days DAY)""")
     df = pd.read_sql(q, con=engine, params={'days': days})
     df['date'] = pd.to_datetime(df['date'])
@@ -156,7 +156,7 @@ def load_yearly_totals():
     q = """SELECT s.staCode, s.staName, s.cluster_name,
                   YEAR(d.trnOpDate) AS yr,
                   SUM(d.gateInComingCnt+d.gateOutGoingCnt) AS total
-           FROM DailyPassenger d JOIN StationInfo s ON d.staCode=s.staCode
+           FROM dailypassenger d JOIN stationinfo s ON d.staCode=s.staCode
            WHERE YEAR(d.trnOpDate) BETWEEN 2019 AND 2025
            GROUP BY s.staCode, s.staName, s.cluster_name, yr
            ORDER BY s.staCode, yr"""
@@ -168,7 +168,7 @@ def load_station_forecast(sta_code):
     # 自動建表（forecasting.py 尚未執行時確保不崩潰）
     with engine.begin() as conn:
         conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS StationForecast (
+            CREATE TABLE IF NOT EXISTS stationforecast (
                 staCode VARCHAR(10) NOT NULL,
                 ds DATE NOT NULL,
                 yhat FLOAT, yhat_lower FLOAT, yhat_upper FLOAT,
@@ -178,7 +178,7 @@ def load_station_forecast(sta_code):
         """))
     try:
         q = text("SELECT ds, yhat, yhat_lower, yhat_upper, is_future "
-                 "FROM StationForecast WHERE staCode=:code ORDER BY ds")
+                 "FROM stationforecast WHERE staCode=:code ORDER BY ds")
         df = pd.read_sql(q, con=engine, params={'code': sta_code})
     except Exception:
         return pd.DataFrame()
@@ -974,7 +974,7 @@ $$CAGR = \\left(\\frac{160}{100}\\right)^{\\frac{1}{5}} - 1 \\approx 9.9\\%$$
     st.markdown("---")
     st.subheader("逐年運量趨勢（選取車站）")
     trend_opts  = {r['staName']: r['staCode'] for _, r in
-                   pd.read_sql("SELECT staCode,staName FROM StationInfo",
+                   pd.read_sql("SELECT staCode,staName FROM stationinfo",
                                create_engine(DB_URL)).iterrows()}
     sel_stations = st.multiselect(
         "選擇車站追蹤年度趨勢", list(trend_opts.keys()),
