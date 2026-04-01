@@ -71,6 +71,52 @@ def get_taiwan_holidays():
     return pd.DataFrame(rows)
 
 # ============================================================
+# 車種別資料解析
+# ============================================================
+@st.cache_data
+def load_train_type_data():
+    import os
+    csv_path = os.path.join(os.path.dirname(__file__), '2019-2025車種別客運量.csv')
+    raw = pd.read_csv(csv_path, header=None, encoding='utf-8-sig')
+
+    month_map = {'Jan.':1,'Feb.':2,'Mar.':3,'Apr.':4,'May':5,'June':6,
+                 'July':7,'Aug.':8,'Sep.':9,'Oct.':10,'Nov.':11,'Dec.':12}
+
+    def to_num(v):
+        if pd.isna(v) or str(v).strip() in ('', '-'):
+            return 0
+        return int(str(v).replace(',', '').strip())
+
+    records = []
+    current_year = None
+    for _, row in raw.iterrows():
+        val1 = str(row[1]).strip() if not pd.isna(row[1]) else ''
+        # 年份列
+        if val1.isdigit() and len(val1) == 4:
+            current_year = int(val1)
+            continue
+        # 月份列
+        if val1 in month_map and current_year:
+            records.append({
+                'year': current_year,
+                'month': month_map[val1],
+                'ym': pd.Timestamp(f'{current_year}-{month_map[val1]:02d}-01'),
+                'pax_total':    to_num(row[2]),
+                'pax_tzechiang': to_num(row[3]),
+                'pax_chukuang': to_num(row[4]),
+                'pax_local':    to_num(row[5]),
+                'pax_ordinary': to_num(row[6]),
+                'km_total':     to_num(row[7]),
+                'km_tzechiang': to_num(row[8]),
+                'km_chukuang':  to_num(row[9]),
+                'km_local':     to_num(row[10]),
+                'km_ordinary':  to_num(row[11]),
+            })
+    df = pd.DataFrame(records)
+    df = df[df['pax_total'] > 0].reset_index(drop=True)
+    return df
+
+# ============================================================
 # 資料讀取函式
 # ============================================================
 @st.cache_data(ttl=300)
@@ -218,7 +264,8 @@ with st.sidebar:
          "🗺️ 全台車站地圖",
          "📈 時間序列趨勢分析",
          "🔮 運量預測（Phase 3）",
-         "📉 CAGR 成長趨勢排行"],
+         "📉 CAGR 成長趨勢排行",
+         "🚆 車種別客運分析"],
         label_visibility="collapsed",
     )
     st.markdown("---")
@@ -999,3 +1046,175 @@ $$CAGR = \\left(\\frac{160}{100}\\right)^{\\frac{1}{5}} - 1 \\approx 9.9\\%$$
     for c in [f'{base_yr}年總人次', f'{target_yr}年總人次']:
         show_cagr[c] = show_cagr[c].apply(lambda x: f"{x:,}")
     st.dataframe(show_cagr, use_container_width=True, hide_index=True)
+
+
+# ============================================================
+# 頁面七：車種別客運分析
+# ============================================================
+elif page == "🚆 車種別客運分析":
+    st.title("🚆 車種別客運分析")
+    st.markdown("以 **自強號、莒光號、區間列車、普通車** 四車種切入，分析 2019–2025 年度客運結構演變。")
+
+    tt = load_train_type_data()
+    TRAIN_COLORS = {
+        '自強號':  '#d62728',
+        '莒光號':  '#ff7f0e',
+        '區間列車': '#1f77b4',
+        '普通車':  '#2ca02c',
+    }
+
+    # ── Section 1：COVID-19 衝擊 ──────────────────────────────
+    st.markdown("---")
+    st.subheader("1. COVID-19 衝擊分析")
+
+    fig_covid = go.Figure()
+    fig_covid.add_trace(go.Scatter(
+        x=tt['ym'], y=tt['pax_total'], mode='lines', fill='tozeroy',
+        name='總客運人次', line=dict(color='#1f77b4', width=2),
+        fillcolor='rgba(31,119,180,0.12)'
+    ))
+    for col, name in [('pax_tzechiang','自強號'),('pax_chukuang','莒光號'),
+                      ('pax_local','區間列車'),('pax_ordinary','普通車')]:
+        fig_covid.add_trace(go.Scatter(
+            x=tt['ym'], y=tt[col], mode='lines', name=name,
+            line=dict(color=TRAIN_COLORS[name], width=1.5, dash='dot')
+        ))
+    fig_covid.add_vrect(x0='2020-02-01', x1='2020-05-01',
+        fillcolor='rgba(255,0,0,0.08)', line_width=0,
+        annotation_text='COVID 第一波', annotation_position='top left')
+    fig_covid.add_vrect(x0='2021-05-01', x1='2021-08-01',
+        fillcolor='rgba(255,0,0,0.08)', line_width=0,
+        annotation_text='COVID 第三級', annotation_position='top left')
+    fig_covid.update_layout(
+        xaxis_title='月份', yaxis_title='人次',
+        hovermode='x unified', height=380, margin=dict(t=10, b=10)
+    )
+    st.plotly_chart(fig_covid, use_container_width=True)
+
+    # 衝擊量化表
+    yearly_tt = tt.groupby('year')[['pax_total','pax_tzechiang','pax_chukuang','pax_local']].sum()
+    base_2019 = yearly_tt.loc[2019]
+    impact = pd.DataFrame({
+        '年份': yearly_tt.index,
+        '總人次': yearly_tt['pax_total'],
+        'vs 2019 (%)': ((yearly_tt['pax_total'] / base_2019['pax_total']) - 1) * 100,
+    })
+    impact['總人次'] = impact['總人次'].apply(lambda x: f"{x:,.0f}")
+    impact['vs 2019 (%)'] = impact['vs 2019 (%)'].apply(lambda x: f"{x:+.1f}%")
+    st.dataframe(impact.set_index('年份'), use_container_width=True)
+
+    # ── Section 2：車種結構變遷 ───────────────────────────────
+    st.markdown("---")
+    st.subheader("2. 車種市占率結構變遷")
+
+    tt['share_tzechiang'] = tt['pax_tzechiang'] / tt['pax_total'] * 100
+    tt['share_chukuang']  = tt['pax_chukuang']  / tt['pax_total'] * 100
+    tt['share_local']     = tt['pax_local']      / tt['pax_total'] * 100
+    tt['share_ordinary']  = tt['pax_ordinary']   / tt['pax_total'] * 100
+
+    fig_share = go.Figure()
+    for col, name in [('share_tzechiang','自強號'),('share_chukuang','莒光號'),
+                      ('share_local','區間列車'),('share_ordinary','普通車')]:
+        fig_share.add_trace(go.Scatter(
+            x=tt['ym'], y=tt[col], mode='lines', name=name,
+            stackgroup='one', line=dict(color=TRAIN_COLORS[name])
+        ))
+    fig_share.update_layout(
+        xaxis_title='月份', yaxis_title='市占率 (%)',
+        hovermode='x unified', height=360, margin=dict(t=10, b=10),
+        yaxis=dict(range=[0, 100])
+    )
+    st.plotly_chart(fig_share, use_container_width=True)
+
+    # 年均市占率比較
+    yr_share = tt.groupby('year').apply(lambda g: pd.Series({
+        '自強號':   g['pax_tzechiang'].sum() / g['pax_total'].sum() * 100,
+        '莒光號':   g['pax_chukuang'].sum()  / g['pax_total'].sum() * 100,
+        '區間列車': g['pax_local'].sum()      / g['pax_total'].sum() * 100,
+        '普通車':   g['pax_ordinary'].sum()   / g['pax_total'].sum() * 100,
+    })).round(1)
+    st.dataframe(yr_share.style.format("{:.1f}%"), use_container_width=True)
+
+    # ── Section 3：季節性模式 ─────────────────────────────────
+    st.markdown("---")
+    st.subheader("3. 季節性模式（月均人次）")
+
+    monthly_avg = tt.groupby('month')[['pax_tzechiang','pax_chukuang',
+                                        'pax_local','pax_ordinary']].mean().reset_index()
+    month_labels = ['1月','2月','3月','4月','5月','6月',
+                    '7月','8月','9月','10月','11月','12月']
+    monthly_avg['month_label'] = monthly_avg['month'].apply(lambda m: month_labels[m-1])
+
+    fig_season = go.Figure()
+    for col, name in [('pax_tzechiang','自強號'),('pax_chukuang','莒光號'),
+                      ('pax_local','區間列車'),('pax_ordinary','普通車')]:
+        fig_season.add_trace(go.Bar(
+            x=monthly_avg['month_label'], y=monthly_avg[col],
+            name=name, marker_color=TRAIN_COLORS[name]
+        ))
+    fig_season.update_layout(
+        barmode='stack', xaxis_title='月份', yaxis_title='月均人次',
+        hovermode='x unified', height=360, margin=dict(t=10, b=10)
+    )
+    st.plotly_chart(fig_season, use_container_width=True)
+
+    # ── Section 4：平均旅程距離 ───────────────────────────────
+    st.markdown("---")
+    st.subheader("4. 平均旅程距離（延人公里 ÷ 人次）")
+
+    km_df = tt[tt['km_total'] > 0].copy()
+    km_df['avg_dist_total']     = km_df['km_total']     / km_df['pax_total']
+    km_df['avg_dist_tzechiang'] = km_df['km_tzechiang'] / km_df['pax_tzechiang'].replace(0, np.nan)
+    km_df['avg_dist_chukuang']  = km_df['km_chukuang']  / km_df['pax_chukuang'].replace(0, np.nan)
+    km_df['avg_dist_local']     = km_df['km_local']      / km_df['pax_local'].replace(0, np.nan)
+
+    fig_dist = go.Figure()
+    for col, name in [('avg_dist_tzechiang','自強號'),('avg_dist_chukuang','莒光號'),
+                      ('avg_dist_local','區間列車')]:
+        fig_dist.add_trace(go.Scatter(
+            x=km_df['ym'], y=km_df[col], mode='lines', name=name,
+            line=dict(color=TRAIN_COLORS[name], width=2)
+        ))
+    fig_dist.update_layout(
+        xaxis_title='月份', yaxis_title='平均旅程（公里）',
+        hovermode='x unified', height=360, margin=dict(t=10, b=10)
+    )
+    st.plotly_chart(fig_dist, use_container_width=True)
+    st.caption("普通車因資料缺漏較多，不納入比較。")
+
+    # ── Section 5：車種 CAGR ──────────────────────────────────
+    st.markdown("---")
+    st.subheader("5. 各車種年度成長率（CAGR）")
+
+    yr_pax = tt.groupby('year')[['pax_tzechiang','pax_chukuang','pax_local']].sum()
+    available_years = sorted(yr_pax.index.tolist())
+    c1, c2 = st.columns(2)
+    base_y   = c1.selectbox("基準年", available_years, index=0)
+    target_y = c2.selectbox("目標年", available_years, index=len(available_years)-1)
+
+    if base_y < target_y:
+        n = target_y - base_y
+        cagr_rows = []
+        for col, name in [('pax_tzechiang','自強號'),('pax_chukuang','莒光號'),('pax_local','區間列車')]:
+            b = yr_pax.loc[base_y, col]
+            t = yr_pax.loc[target_y, col]
+            if b > 0:
+                cagr_rows.append({'車種': name, f'{base_y}年': int(b),
+                                   f'{target_y}年': int(t),
+                                   'CAGR (%)': round(((t/b)**(1/n)-1)*100, 2)})
+        cagr_tt = pd.DataFrame(cagr_rows)
+
+        fig_cagr = px.bar(
+            cagr_tt, x='車種', y='CAGR (%)',
+            color='車種', color_discrete_map=TRAIN_COLORS,
+            text='CAGR (%)', height=340
+        )
+        fig_cagr.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+        fig_cagr.update_layout(showlegend=False, margin=dict(t=20, b=10))
+        st.plotly_chart(fig_cagr, use_container_width=True)
+
+        cagr_tt[f'{base_y}年'] = cagr_tt[f'{base_y}年'].apply(lambda x: f"{x:,}")
+        cagr_tt[f'{target_y}年'] = cagr_tt[f'{target_y}年'].apply(lambda x: f"{x:,}")
+        st.dataframe(cagr_tt.set_index('車種'), use_container_width=True)
+    else:
+        st.warning("目標年須大於基準年")
