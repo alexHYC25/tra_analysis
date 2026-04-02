@@ -254,6 +254,31 @@ def compute_cagr(yearly_df, base_year=2019, target_year=2024):
 # ============================================================
 # Sidebar
 # ============================================================
+# 造訪人數計數
+# ============================================================
+def record_visit():
+    """首次載入時記錄一筆造訪，並回傳累計總次數。"""
+    try:
+        engine = create_engine(DB_URL)
+        with engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS page_visits (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    visited_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """))
+            conn.execute(text("INSERT INTO page_visits (visited_at) VALUES (NOW())"))
+            result = conn.execute(text("SELECT COUNT(*) FROM page_visits"))
+            return result.scalar()
+    except Exception:
+        return None
+
+# 只在 session 第一次載入時計數，避免切換頁面重複計算
+if 'visited' not in st.session_state:
+    st.session_state['visited'] = True
+    st.session_state['visit_count'] = record_visit()
+
+# ============================================================
 with st.sidebar:
     st.markdown("## 🚂 台鐵營運\n## 智慧分析系統")
     st.markdown("---")
@@ -272,6 +297,8 @@ with st.sidebar:
     st.markdown("---")
     st.caption("資料範圍：2019/04 – 2025/12")
     st.caption("資料來源：台灣鐵路局")
+    if st.session_state.get('visit_count'):
+        st.caption(f"👥 累計造訪：{st.session_state['visit_count']:,} 次")
 
 # ============================================================
 # 頁面一：營運主管戰情室
