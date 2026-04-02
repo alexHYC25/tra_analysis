@@ -297,6 +297,7 @@ with st.sidebar:
     st.markdown("---")
     st.caption("資料範圍：2019/04 – 2025/12")
     st.caption("資料來源：台灣鐵路局")
+    st.markdown("[🔗 網站連結](https://traanalysis-production.up.railway.app/)")
     if st.session_state.get('visit_count'):
         st.caption(f"👥 累計造訪：{st.session_state['visit_count']:,} 次")
 
