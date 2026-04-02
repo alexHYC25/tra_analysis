@@ -265,7 +265,8 @@ with st.sidebar:
          "📈 時間序列趨勢分析",
          "🔮 運量預測（Phase 3）",
          "📉 CAGR 成長趨勢排行",
-         "🚆 車種別客運分析"],
+         "🚆 車種別客運分析",
+         "📋 報告大綱與建議"],
         label_visibility="collapsed",
     )
     st.markdown("---")
@@ -1250,3 +1251,277 @@ $$\\text{CAGR} = \\left(\\frac{\\text{目標年人次}}{\\text{基準年人次}}
         st.dataframe(cagr_tt.set_index('車種'), use_container_width=True)
     else:
         st.warning("目標年須大於基準年")
+
+# ============================================================
+# 頁面八：報告大綱與建議
+# ============================================================
+elif page == "📋 報告大綱與建議":
+    st.title("📋 台鐵營運分析報告大綱與建議")
+    st.markdown("根據本系統各分析模組的資料，自動彙整報告架構，並提供初步策略建議供參考。")
+
+    with st.expander("📖 本頁功能說明", expanded=False):
+        st.markdown("""
+本頁自動讀取各分析模組的最新計算結果，整合成一份**報告大綱**，協助使用者：
+- 快速掌握各章節應涵蓋的核心發現
+- 了解資料所呈現的趨勢與異常
+- 取得初步的策略建議作為報告撰寫起點
+
+> 建議搭配各分析頁面的圖表，將大綱內容具體化為完整報告。
+        """)
+
+    # ── 讀取各模組資料 ────────────────────────────────────────
+    try:
+        monthly_df   = load_monthly_total()
+        cluster_df   = load_cluster_data()
+        cagr_df      = load_cagr_data(base_year=2019, target_year=2024)
+        tt           = load_train_type_data()
+        anom_df      = load_recent_anomalies(90)
+        data_ok      = True
+    except Exception as e:
+        st.error(f"資料載入失敗：{e}")
+        data_ok = False
+
+    if data_ok:
+        # ── 計算摘要數字 ──────────────────────────────────────
+        total_pax      = int(monthly_df['total'].sum())
+        latest_month   = monthly_df.iloc[-1]
+        prev_month     = monthly_df.iloc[-2]
+        mom_pct        = (latest_month['total'] - prev_month['total']) / prev_month['total'] * 100
+        top3_stations  = cluster_df.nlargest(3, 'avg_daily_total')[['staName','avg_daily_total']].values.tolist()
+        anom_count     = len(anom_df)
+        top5_growth    = cagr_df[cagr_df['cagr_pct'] > 0].head(5)[['staName','cagr_pct']].values.tolist()
+        top5_decline   = cagr_df[cagr_df['cagr_pct'] < 0].tail(5)[['staName','cagr_pct']].values.tolist()
+
+        # 車種近一年佔比
+        yr_tt = tt[tt['year'] == tt['year'].max()]
+        total_yr = yr_tt['pax_total'].sum()
+        local_share  = yr_tt['pax_local'].sum()  / total_yr * 100  if total_yr > 0 else 0
+        tze_share    = yr_tt['pax_tzechiang'].sum() / total_yr * 100 if total_yr > 0 else 0
+
+        # 集群分布
+        cluster_counts = cluster_df['cluster_name'].value_counts().to_dict() if 'cluster_name' in cluster_df.columns else {}
+
+        # ── 章節一：執行摘要 ──────────────────────────────────
+        st.markdown("---")
+        st.header("第一章　執行摘要")
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("資料涵蓋期間", "2019/04 – 2025/12")
+        col2.metric("累計總運量", f"{total_pax/1e8:.2f} 億人次")
+        col3.metric("最新月份月增率",
+                    latest_month['ym'].strftime('%Y-%m'),
+                    f"{'+' if mom_pct>=0 else ''}{mom_pct:.1f}%")
+
+        st.markdown(f"""
+**建議撰寫方向：**
+- 本報告彙整台灣鐵路局 2019 年至 2025 年間全台 **243 座車站**的每日進出站資料，
+  累計總運量達 **{total_pax/1e8:.2f} 億人次**。
+- 最新月份（{latest_month['ym'].strftime('%Y年%m月')}）較上月運量
+  {'增加' if mom_pct >= 0 else '下降'} **{abs(mom_pct):.1f}%**，
+  {'顯示整體需求持續回溫' if mom_pct >= 0 else '需關注短期需求波動原因'}。
+- 報告涵蓋車站集群分析、時間趨勢、異常偵測、客運預測及車種結構等面向，
+  並於各章提供策略建議。
+        """)
+
+        # ── 章節二：車站分群分析 ──────────────────────────────
+        st.markdown("---")
+        st.header("第二章　車站功能定位與 DNA 分群")
+        st.markdown(f"""
+**核心發現：**
+- 全台 243 座車站依日均運量與週末／平日比值，聚類為四大功能型態：
+  {'、'.join([f"**{k}**（{v} 站）" for k,v in cluster_counts.items()]) if cluster_counts else '詳見車站 DNA 分群地圖'}。
+- 日均運量前三名：{' > '.join([f"**{s[0]}**（{int(s[1]):,} 人/日）" for s in top3_stations])}。
+- 「週末觀光熱點」型車站的週末運量為平日的 1.5 倍以上，呈現明顯季節性脈衝，
+  與「都會核心大站」的穩定通勤需求形成鮮明對比。
+
+**建議撰寫方向：**
+1. 以分群地圖呈現地理分布，說明各集群在路網中的定位角色。
+2. 比較各集群平均日運量、週末比值，歸納各群的服務特性。
+3. 建議依集群制訂差異化行銷策略：都會核心站強化月票/通勤方案，
+   觀光熱點站發展套票與接駁合作。
+        """)
+
+        # ── 章節三：長期趨勢與 COVID-19 衝擊 ─────────────────
+        st.markdown("---")
+        st.header("第三章　長期運量趨勢與 COVID-19 衝擊分析")
+        st.markdown(f"""
+**核心發現：**
+- 2020 年 3 月起受 COVID-19 疫情影響，全台運量出現顯著衰退，
+  2021 年本土疫情高峰期間降至最低谷。
+- 2022 年下半年起隨防疫解封逐步回升，2023–2024 年回復至疫前水準。
+- 區間列車佔總運量比例約 **{local_share:.1f}%**，為最主要的通勤服務類型；
+  自強號佔比約 **{tze_share:.1f}%**，以中長程旅客為主。
+
+**建議撰寫方向：**
+1. 繪製 2019–2025 月度趨勢折線圖，標示 COVID-19 影響期間。
+2. 計算各年度總運量及恢復率（以 2019 年為基準）。
+3. 分析疫情對各車種的差異性衝擊（高鐵替代效應 vs. 通勤韌性）。
+4. 建議建立「緊急事件運量預警機制」，以便提前調度資源。
+        """)
+
+        # ── 章節四：異常偵測 ──────────────────────────────────
+        st.markdown("---")
+        st.header("第四章　異常突波偵測與風險預警")
+
+        if anom_count > 0 and len(anom_df.columns) > 0:
+            top_anom = anom_df.nlargest(3, 'z_score') if 'z_score' in anom_df.columns else anom_df.head(3)
+            anom_preview = top_anom[['staName','trnOpDate','z_score']].rename(
+                columns={'staName':'車站','trnOpDate':'日期','z_score':'Z-Score'}
+            ) if all(c in top_anom.columns for c in ['staName','trnOpDate','z_score']) else top_anom.head(3)
+            st.dataframe(anom_preview, use_container_width=True, hide_index=True)
+
+        st.markdown(f"""
+**核心發現：**
+- 近 90 天共偵測到 **{anom_count} 筆**異常突波事件（Z-Score > 3）。
+- 異常高峰多集中於連續假期（春節、清明、端午、中秋）前後，
+  以及重大活動（演唱會、運動賽事）舉辦日。
+- Z-Score 超過 5 的極端事件，通常對應單日運量超出預期均值 150% 以上。
+
+**建議撰寫方向：**
+1. 列舉近期 Top 5 異常事件，說明可能原因（假期、活動、天災等）。
+2. 分析異常的地理分布：觀光站 vs. 通勤站的觸發頻率差異。
+3. 建議建立即時預警通知流程，於 Z-Score > 3 時自動發送調度通知。
+4. 評估是否需要動態加班車機制因應突發性需求。
+        """)
+
+        # ── 章節五：客運量預測 ────────────────────────────────
+        st.markdown("---")
+        st.header("第五章　短期客運量預測（Prophet 模型）")
+        st.markdown(f"""
+**核心發現：**
+- 採用 Facebook Prophet 模型，針對全台 243 座車站各自訓練時間序列預測模型，
+  預測期間為 90 天，並納入台灣國定假日效應。
+- 模型同時捕捉「年週期性」（暑假旺季、農曆新年峰值）與「週週期性」（週末出遊特性）。
+- 預測信賴區間（80%）可作為容量規劃的上下界參考。
+
+**建議撰寫方向：**
+1. 以臺北、桃園、花蓮等代表性車站為例，展示預測曲線與歷史數據的吻合度。
+2. 說明模型評估指標（MAE、MAPE）及其業務意涵。
+3. 基於 90 天預測，提出班次調配建議（如特定旺季增開班次）。
+4. 建議每月重新訓練模型，以反映最新需求趨勢。
+        """)
+
+        # ── 章節六：成長趨勢與 CAGR ──────────────────────────
+        st.markdown("---")
+        st.header("第六章　各站成長趨勢與 CAGR 排行")
+
+        col_g, col_d = st.columns(2)
+        with col_g:
+            st.markdown("**成長前 5 名（2019→2024）**")
+            if top5_growth:
+                for name, cagr in top5_growth:
+                    st.markdown(f"- **{name}**：年均成長 +{cagr:.1f}%")
+            else:
+                st.info("無正成長資料")
+        with col_d:
+            st.markdown("**衰退前 5 名（2019→2024）**")
+            if top5_decline:
+                for name, cagr in reversed(top5_decline):
+                    st.markdown(f"- **{name}**：年均衰退 {cagr:.1f}%")
+            else:
+                st.info("無衰退資料")
+
+        st.markdown(f"""
+**建議撰寫方向：**
+1. 分析高成長站點的共同特徵（城市發展、接駁建設、觀光資源等）。
+2. 探討衰退站點的原因（人口外移、競爭交通工具、班次調整等）。
+3. 建議針對衰退超過 -5% CAGR 的站點啟動「站點活化計畫」，
+   包含與地方政府、旅遊業者合作開發在地遊程。
+4. 高成長站點應提前規劃擴容方案，避免尖峰時段擁擠影響服務品質。
+        """)
+
+        # ── 章節七：車種結構分析 ──────────────────────────────
+        st.markdown("---")
+        st.header("第七章　車種結構與服務優化")
+        st.markdown(f"""
+**核心發現：**
+- 區間列車為通勤骨幹，佔總運量約 **{local_share:.1f}%**；
+  疫情期間其韌性明顯高於長途車種，顯示在地通勤需求相對穩定。
+- 自強號（含太魯閣/普悠瑪）佔比約 **{tze_share:.1f}%**，
+  平均旅程距離最長，是台鐵長途競爭力的關鍵。
+- 莒光號客運量自 2020 年起持續下滑，市場份額受自強號及高鐵雙面擠壓。
+
+**建議撰寫方向：**
+1. 繪製 2019–2025 年各車種市佔率演變堆疊面積圖。
+2. 分析莒光號衰退趨勢，評估是否需調整票價策略或服務定位。
+3. 比較各車種平均旅程距離的年度變化，推測旅客行為轉變。
+4. 建議研究「區間快車」等新車種引入的可行性，填補通勤與長途之間的市場缺口。
+        """)
+
+        # ── 章節八：綜合策略建議 ──────────────────────────────
+        st.markdown("---")
+        st.header("第八章　綜合策略建議")
+        st.markdown("""
+根據以上各章分析，提出以下六項核心策略建議：
+
+| # | 建議方向 | 優先程度 | 對應分析模組 |
+|---|---------|---------|------------|
+| 1 | **差異化行銷策略**：依車站 DNA 集群制訂不同促銷方案（通勤月票、觀光套票） | 🔴 高 | 車站 DNA 分群 |
+| 2 | **動態班次調配**：建立以預測為基礎的班次調整機制，提升尖峰效率 | 🔴 高 | 運量預測 |
+| 3 | **衰退站點活化**：針對 CAGR < -5% 站點啟動跨域合作，開發新客群 | 🟡 中 | CAGR 排行 |
+| 4 | **莒光號轉型評估**：研究重新定位或票價調整以提升競爭力 | 🟡 中 | 車種別分析 |
+| 5 | **即時預警系統**：建立 Z-Score 自動警示流程，縮短突發事件應變時間 | 🟡 中 | 異常偵測 |
+| 6 | **數據治理強化**：提升資料更新頻率至 T+1，並建立資料品質監控機制 | 🟢 低 | 全系統 |
+
+---
+
+> **免責聲明**：本頁建議由系統自動依資料生成，僅供參考。實際策略決策應結合業務專家判斷、法規環境及組織資源進行綜合評估。
+        """)
+
+        # ── 報告大綱快速複製區 ────────────────────────────────
+        st.markdown("---")
+        st.header("📄 報告大綱（可直接複製）")
+        outline_text = f"""台鐵營運分析報告大綱
+資料期間：2019/04 – 2025/12　　累計運量：{total_pax/1e8:.2f} 億人次
+
+第一章　執行摘要
+  1.1 報告背景與目的
+  1.2 資料來源與範圍說明
+  1.3 主要發現一覽
+
+第二章　車站功能定位與 DNA 分群
+  2.1 分群方法（K-Means 聚類）
+  2.2 四大車站類型特徵比較
+  2.3 地理分布與路網意涵
+
+第三章　長期運量趨勢與 COVID-19 衝擊分析
+  3.1 2019–2025 年度總運量演變
+  3.2 COVID-19 衝擊期間（2020–2021）量化分析
+  3.3 復甦路徑與現況評估
+
+第四章　異常突波偵測與風險預警
+  4.1 Z-Score 異常偵測方法說明
+  4.2 近 90 天異常事件彙整（共 {anom_count} 筆）
+  4.3 異常事件成因分類
+
+第五章　短期客運量預測（Prophet 模型）
+  5.1 模型架構與假日效應設計
+  5.2 代表性車站預測結果展示
+  5.3 模型準確度評估
+  5.4 未來 90 天運量展望
+
+第六章　各站成長趨勢與 CAGR 排行
+  6.1 CAGR 計算方法
+  6.2 高成長站點特徵分析
+  6.3 衰退站點成因探討
+  6.4 活化建議
+
+第七章　車種結構與服務優化
+  7.1 各車種市佔率演變
+  7.2 平均旅程距離分析
+  7.3 莒光號競爭力評估
+  7.4 新車種引入可行性
+
+第八章　綜合策略建議
+  8.1 差異化行銷策略
+  8.2 動態班次調配機制
+  8.3 衰退站點活化計畫
+  8.4 即時預警系統建置
+  8.5 資料治理強化路徑
+
+附錄
+  A. 資料欄位說明
+  B. 統計方法補充說明
+  C. 各站 CAGR 完整排行表
+"""
+        st.text_area("報告大綱（點選後 Ctrl+A 全選複製）", outline_text, height=420)
