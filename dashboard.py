@@ -1273,7 +1273,8 @@ elif page == "📋 報告大綱與建議":
     try:
         monthly_df   = load_monthly_total()
         cluster_df   = load_cluster_data()
-        cagr_df      = load_cagr_data(base_year=2019, target_year=2024)
+        yearly_df    = load_yearly_totals()
+        cagr_df      = compute_cagr(yearly_df, base_year=2019, target_year=2024)
         tt           = load_train_type_data()
         anom_df      = load_recent_anomalies(90)
         data_ok      = True
