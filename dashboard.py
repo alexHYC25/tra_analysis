@@ -24,11 +24,11 @@ st.set_page_config(
 
 # 雲端部署時從環境變數或 st.secrets 讀取，本機開發則使用 localhost
 import os
-DB_URL = (
-    os.environ.get("DB_URL")
-    or st.secrets.get("DB_URL", None)
-    or 'mysql+pymysql://root:@localhost:3306/TRA_DataMining'
-)
+try:
+    _secret_db = st.secrets.get("DB_URL", None)
+except Exception:
+    _secret_db = None
+DB_URL = os.environ.get("DB_URL") or _secret_db or 'mysql+pymysql://root:@localhost:3306/TRA_DataMining'
 
 CLUSTER_COLORS = {
     '都會核心大站': '#d62728',
