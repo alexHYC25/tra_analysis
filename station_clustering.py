@@ -19,7 +19,7 @@ print("📥 正在從資料庫讀取車站特徵...")
 db_url = 'mysql+pymysql://root:@localhost:3306/TRA_DataMining'
 engine = create_engine(db_url)
 
-df = pd.read_sql("SELECT * FROM v_StationFeatures WHERE avg_daily_total > 0;", con=engine)
+df = pd.read_sql("SELECT * FROM v_StationFeatures WHERE avg_daily_total > 0 AND staName != '枋野';", con=engine)
 df = df.dropna()
 
 # 統一欄位命名（相容中英文欄位名稱的 View）
