@@ -124,7 +124,7 @@ def load_cluster_data():
     engine = create_engine(DB_URL)
     sta = pd.read_sql(
         "SELECT staCode, staName, cluster_id, cluster_name, lat, lon, city "
-        "FROM stationinfo WHERE cluster_id IS NOT NULL",
+        "FROM stationinfo WHERE cluster_id IS NOT NULL AND staName != '枋野'",
         con=engine
     )
     feat_raw = pd.read_sql(
