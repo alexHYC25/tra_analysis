@@ -19,11 +19,12 @@ print("📥 正在從資料庫讀取車站特徵...")
 db_url = 'mysql+pymysql://root:@localhost:3306/TRA_DataMining'
 engine = create_engine(db_url)
 
-df = pd.read_sql("SELECT * FROM v_StationFeatures WHERE avg_daily_total > 0 AND staName != '枋野';", con=engine)
+df = pd.read_sql("SELECT * FROM v_StationFeatures WHERE avg_daily_total > 0;", con=engine)
 df = df.dropna()
 
 # 統一欄位命名（相容中英文欄位名稱的 View）
 df.columns = ['staCode', 'staName', 'avg_daily_total', 'avg_weekend_total', 'avg_weekday_total', 'weekend_weekday_ratio']
+df = df[df['staName'] != '枋野'].reset_index(drop=True)
 df['avg_daily_total'] = df['avg_daily_total'].astype(float)
 df['weekend_weekday_ratio'] = df['weekend_weekday_ratio'].astype(float)
 
@@ -104,12 +105,15 @@ with engine.begin() as conn:
         except Exception:
             pass  # 欄位已存在
 
-    # 批次更新每個車站的群組
-    for _, row in df.iterrows():
-        conn.execute(
-            text("UPDATE StationInfo SET cluster_id = :cid, cluster_name = :cname WHERE staCode = :code"),
-            {'cid': int(row['cluster_id']), 'cname': row['cluster_name'], 'code': row['staCode']}
-        )
+    # 批次更新每個車站的群組（一次送出所有資料）
+    batch = [
+        {'cid': int(row['cluster_id']), 'cname': row['cluster_name'], 'code': row['staCode']}
+        for _, row in df.iterrows()
+    ]
+    conn.execute(
+        text("UPDATE StationInfo SET cluster_id = :cid, cluster_name = :cname WHERE staCode = :code"),
+        batch
+    )
 
 print("✅ 分群結果已儲存至資料庫！\n")
 
