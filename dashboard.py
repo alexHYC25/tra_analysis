@@ -298,6 +298,9 @@ with st.sidebar:
     st.caption("資料範圍：2019/04 – 2025/12")
     st.caption("資料來源：台灣鐵路局")
     st.markdown("[🔗 資料來源連結](https://drive.google.com/drive/folders/12H-2c3i5waVKD_LnWpPWD2ORN8FJBkA8?usp=sharing)")
+    st.markdown("**研究資料來源**")
+    st.markdown("[📊 每日各站進出站人數（2019–2025）](https://ods.railway.gov.tw/tra-ods-web/ods/download/dataResource/8ae4cabf6973990e0169947ed32454b9)")
+    st.markdown("[📋 台鐵統計資訊專區（月報／年報）](https://www.railway.gov.tw/tra-tip-web/adr/about-public-info-3)")
     if st.session_state.get('visit_count'):
         st.caption(f"👥 累計造訪：{st.session_state['visit_count']:,} 次")
 
