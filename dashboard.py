@@ -290,8 +290,7 @@ with st.sidebar:
          "📈 時間序列趨勢分析",
          "🔮 運量預測（Phase 3）",
          "📉 CAGR 成長趨勢排行",
-         "🚆 車種別客運分析",
-         "📋 報告大綱與建議"],
+         "🚆 車種別客運分析"],
         label_visibility="collapsed",
     )
     st.markdown("---")
